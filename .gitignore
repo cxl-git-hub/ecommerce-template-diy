@@ -1,0 +1,13 @@
+**/__pycache__/
+backend/app/**/venv/
+backend/app/**/.env
+backend/app/**/.env.*
+backend/uploads/fonts/*
+backend/uploads/images/*
+backend/uploads/rembg/*
+backend/uploads/thumbnails/*
+frontend/node_modules/
+frontend/dist/
+frontend/.env
+frontend/.env.*
+frontend/build/
