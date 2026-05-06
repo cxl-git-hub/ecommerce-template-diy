@@ -85,6 +85,18 @@ class TemplateUpdate(BaseModel):
     category_id: Optional[int] = None
 
 
+class TemplateVersionBrief(BaseModel):
+    id: int
+    version_number: int
+    description: Optional[str] = None
+    thumbnail_url: Optional[str] = None
+    status: str
+    created_at: datetime
+
+    class Config:
+        from_attributes = True
+
+
 class TemplateOut(BaseModel):
     id: int
     title: str
@@ -98,6 +110,8 @@ class TemplateOut(BaseModel):
     is_deleted: int
     created_at: datetime
     updated_at: datetime
+    current_version: Optional[TemplateVersionBrief] = None
+    versions_count: int = 0
 
     class Config:
         from_attributes = True

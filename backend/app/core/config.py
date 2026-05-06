@@ -12,11 +12,12 @@ class Settings(BaseSettings):
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 60 * 24 * 7  # 7 days
     
     # Database
-    DATABASE_URL: str = "mysql+pymysql://root:your-pass-word@localhost:3306/diy_template"
+    DATABASE_URL: str = "mysql+pymysql://root:12345678@localhost:3306/diy_template"
     
     # File storage
     UPLOAD_DIR: str = "uploads"
     FONT_DIR: str = "fonts"
+    MODELS_DIR: str = "models"
     MAX_UPLOAD_SIZE: int = 20 * 1024 * 1024  # 20MB
     
     # CORS

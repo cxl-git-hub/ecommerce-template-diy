@@ -247,12 +247,16 @@ export default function DesignEditor() {
     const node = stageRef.current.findOne(`#${selectedLayerId}`);
     if (!node) return null;
     const rect = node.getClientRect();
-    const stageBox = stageRef.current.container().getBoundingClientRect();
+    const stageContainer = stageRef.current.container();
+    const stageBox = stageContainer.getBoundingClientRect();
     return {
-      x: stageBox.left + (rect.x * stageScale + stagePos.x),
-      y: stageBox.top + (rect.y * stageScale + stagePos.y),
+      x: rect.x * stageScale + stagePos.x,
+      y: rect.y * stageScale + stagePos.y,
       width: rect.width * stageScale,
       height: rect.height * stageScale,
+      // 相对于画布容器的位置
+      containerX: rect.x * stageScale + stagePos.x,
+      containerY: rect.y * stageScale + stagePos.y,
     };
   };
 
@@ -304,8 +308,8 @@ export default function DesignEditor() {
           <div
             className="absolute z-20 flex gap-1.5"
             style={{
-              left: selectedLayerPos.x + selectedLayerPos.width / 2,
-              top: selectedLayerPos.y - 40,
+              left: selectedLayerPos.containerX + selectedLayerPos.width / 2,
+              top: selectedLayerPos.containerY + selectedLayerPos.height + 5,
               transform: 'translateX(-50%)',
             }}
           >
@@ -376,6 +380,7 @@ export default function DesignEditor() {
                       handleTextDblClick(layer.id);
                     }
                   }}
+                  onUpdate={updateLayer}
                 />
               ))}
               <Transformer ref={transformerRef} rotateEnabled={true} enabledAnchors={['top-left', 'top-right', 'bottom-left', 'bottom-right']} />
@@ -456,7 +461,7 @@ export default function DesignEditor() {
 }
 
 // 画布图层渲染
-function CanvasLayer({ layer, isHovered, isSelected, onSelect, onHover, onHoverEnd, onDblClick }: {
+function CanvasLayer({ layer, isHovered, isSelected, onSelect, onHover, onHoverEnd, onDblClick, onUpdate }: {
   layer: LayerType;
   isHovered: boolean;
   isSelected: boolean;
@@ -464,6 +469,7 @@ function CanvasLayer({ layer, isHovered, isSelected, onSelect, onHover, onHoverE
   onHover: () => void;
   onHoverEnd: () => void;
   onDblClick: () => void;
+  onUpdate: (id: string, updates: Partial<LayerType>) => void;
 }) {
   const [image, setImage] = useState<HTMLImageElement | null>(null);
 
@@ -483,6 +489,10 @@ function CanvasLayer({ layer, isHovered, isSelected, onSelect, onHover, onHoverE
     }
   }, [layer]);
 
+  const handleDragEnd = (e: Konva.KonvaEventObject<DragEvent>) => {
+    onUpdate(layer.id, { x: e.target.x(), y: e.target.y() });
+  };
+
   const commonProps = {
     id: layer.id,
     x: layer.x,
@@ -497,6 +507,7 @@ function CanvasLayer({ layer, isHovered, isSelected, onSelect, onHover, onHoverE
     onMouseLeave: onHoverEnd,
     onDblClick: onDblClick,
     onDblTap: onDblClick,
+    onDragEnd: handleDragEnd,
   };
 
   // 悬停高亮虚线框
@@ -598,11 +609,34 @@ function LayerProperties({ layer, fonts, onUpdate, onFontChange }: {
   onUpdate: (updates: Partial<LayerType>) => void;
   onFontChange: (fontFamily: string) => void;
 }) {
+  const commonFields = (
+    <>
+      <PropertyInput label="名称" value={layer.name} onChange={(v) => onUpdate({ name: v })} />
+      <PropertyInput label="X" value={String(layer.x)} type="number" onChange={(v) => onUpdate({ x: Number(v) })} />
+      <PropertyInput label="Y" value={String(layer.y)} type="number" onChange={(v) => onUpdate({ y: Number(v) })} />
+      <PropertyInput label="宽度" value={String(layer.width)} type="number" onChange={(v) => onUpdate({ width: Number(v) })} />
+      <PropertyInput label="高度" value={String(layer.height)} type="number" onChange={(v) => onUpdate({ height: Number(v) })} />
+      <PropertyInput label="旋转" value={String(layer.rotation)} type="number" onChange={(v) => onUpdate({ rotation: Number(v) })} />
+      <div className="flex gap-4">
+        <PropertyInput label="缩放X" value={String(layer.scaleX)} type="number" onChange={(v) => onUpdate({ scaleX: Number(v) })} />
+        <PropertyInput label="缩放Y" value={String(layer.scaleY)} type="number" onChange={(v) => onUpdate({ scaleY: Number(v) })} />
+      </div>
+      <div className="flex gap-4">
+        <label className="flex items-center gap-1 text-sm">
+          <input type="checkbox" checked={layer.locked} onChange={(e) => onUpdate({ locked: e.target.checked })} /> 锁定
+        </label>
+        <label className="flex items-center gap-1 text-sm">
+          <input type="checkbox" checked={layer.visible} onChange={(e) => onUpdate({ visible: e.target.checked })} /> 可见
+        </label>
+      </div>
+    </>
+  );
+
   if (layer.type === 'text') {
     const textLayer = layer as TextLayer;
     return (
       <div className="space-y-3">
-        <PropertyInput label="名称" value={layer.name} onChange={(v) => onUpdate({ name: v })} />
+        {commonFields}
         <PropertyInput label="文字内容" value={textLayer.text} onChange={(v) => onUpdate({ text: v } as any)} />
         {/* 字体选择器 */}
         <div>
@@ -624,18 +658,30 @@ function LayerProperties({ layer, fonts, onUpdate, onFontChange }: {
         </div>
         <PropertyInput label="字号" value={String(textLayer.font_size)} type="number" onChange={(v) => onUpdate({ font_size: Number(v) } as any)} />
         <PropertyInput label="颜色" value={textLayer.color} type="color" onChange={(v) => onUpdate({ color: v } as any)} />
+        <PropertyInput label="行高" value={String(textLayer.line_height)} type="number" onChange={(v) => onUpdate({ line_height: Number(v) } as any)} />
+        <PropertyInput label="字间距" value={String(textLayer.letter_spacing)} type="number" onChange={(v) => onUpdate({ letter_spacing: Number(v) } as any)} />
+        <div>
+          <label className="block text-xs text-gray-500 mb-1">对齐方式</label>
+          <select value={textLayer.align} onChange={(e) => onUpdate({ align: e.target.value } as any)} className="w-full px-2 py-1.5 border rounded text-sm">
+            <option value="left">左对齐</option>
+            <option value="center">居中</option>
+            <option value="right">右对齐</option>
+          </select>
+        </div>
         <PropertyInput label="透明度" value={String(textLayer.opacity)} type="range" onChange={(v) => onUpdate({ opacity: Number(v) } as any)} />
-        <div className="flex gap-2">
+        <div className="flex gap-3">
           <label className="flex items-center gap-1 text-sm">
             <input type="checkbox" checked={textLayer.font_weight === 'bold'} onChange={(e) => onUpdate({ font_weight: e.target.checked ? 'bold' : 'normal' } as any)} /> 粗体
           </label>
           <label className="flex items-center gap-1 text-sm">
             <input type="checkbox" checked={textLayer.font_style === 'italic'} onChange={(e) => onUpdate({ font_style: e.target.checked ? 'italic' : 'normal' } as any)} /> 斜体
           </label>
+          <label className="flex items-center gap-1 text-sm">
+            <input type="checkbox" checked={textLayer.text_decoration === 'underline'} onChange={(e) => onUpdate({ text_decoration: e.target.checked ? 'underline' : 'none' } as any)} /> 下划线
+          </label>
         </div>
-        <PropertyInput label="X" value={String(layer.x)} type="number" onChange={(v) => onUpdate({ x: Number(v) })} />
-        <PropertyInput label="Y" value={String(layer.y)} type="number" onChange={(v) => onUpdate({ y: Number(v) })} />
-        <PropertyInput label="旋转" value={String(layer.rotation)} type="number" onChange={(v) => onUpdate({ rotation: Number(v) })} />
+        <PropertyInput label="描边颜色" value={textLayer.stroke || '#000000'} type="color" onChange={(v) => onUpdate({ stroke: v } as any)} />
+        <PropertyInput label="描边宽度" value={String(textLayer.stroke_width)} type="number" onChange={(v) => onUpdate({ stroke_width: Number(v) } as any)} />
       </div>
     );
   }
@@ -644,30 +690,16 @@ function LayerProperties({ layer, fonts, onUpdate, onFontChange }: {
     const imgLayer = layer as ImageReplaceLayer;
     return (
       <div className="space-y-3">
-        <PropertyInput label="名称" value={layer.name} onChange={(v) => onUpdate({ name: v })} />
+        {commonFields}
         <div>
           <label className="block text-xs text-gray-500 mb-1">替换模式</label>
           <span className="text-sm">{imgLayer.replace_mode === 'ai_cutout' ? 'AI 抠图' : '普通替换'}</span>
         </div>
-        <PropertyInput label="X" value={String(layer.x)} type="number" onChange={(v) => onUpdate({ x: Number(v) })} />
-        <PropertyInput label="Y" value={String(layer.y)} type="number" onChange={(v) => onUpdate({ y: Number(v) })} />
-        <PropertyInput label="宽度" value={String(layer.width)} type="number" onChange={(v) => onUpdate({ width: Number(v) })} />
-        <PropertyInput label="高度" value={String(layer.height)} type="number" onChange={(v) => onUpdate({ height: Number(v) })} />
-        <PropertyInput label="旋转" value={String(layer.rotation)} type="number" onChange={(v) => onUpdate({ rotation: Number(v) })} />
       </div>
     );
   }
 
-  return (
-    <div className="space-y-3">
-      <PropertyInput label="名称" value={layer.name} onChange={(v) => onUpdate({ name: v })} />
-      <PropertyInput label="X" value={String(layer.x)} type="number" onChange={(v) => onUpdate({ x: Number(v) })} />
-      <PropertyInput label="Y" value={String(layer.y)} type="number" onChange={(v) => onUpdate({ y: Number(v) })} />
-      <PropertyInput label="宽度" value={String(layer.width)} type="number" onChange={(v) => onUpdate({ width: Number(v) })} />
-      <PropertyInput label="高度" value={String(layer.height)} type="number" onChange={(v) => onUpdate({ height: Number(v) })} />
-      <PropertyInput label="旋转" value={String(layer.rotation)} type="number" onChange={(v) => onUpdate({ rotation: Number(v) })} />
-    </div>
-  );
+  return <div className="space-y-3">{commonFields}</div>;
 }
 
 function PropertyInput({ label, value, type = 'text', onChange }: {

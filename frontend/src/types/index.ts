@@ -125,6 +125,20 @@ export interface LayerConfig {
   layers: Layer[];
 }
 
+// 图层形状类型
+export type LayerShape = 'none' | 'circle' | 'heart' | 'star' | 'diamond' | 'hexagon' | 'triangle' | 'pentagon';
+
+export const SHAPE_OPTIONS: { value: LayerShape; label: string; icon: string }[] = [
+  { value: 'none', label: '无', icon: '⬜' },
+  { value: 'circle', label: '圆形', icon: '⭕' },
+  { value: 'heart', label: '心形', icon: '❤️' },
+  { value: 'star', label: '星形', icon: '⭐' },
+  { value: 'diamond', label: '菱形', icon: '💎' },
+  { value: 'hexagon', label: '六边形', icon: '⬡' },
+  { value: 'triangle', label: '三角形', icon: '△' },
+  { value: 'pentagon', label: '五边形', icon: '⬠' },
+];
+
 export interface BaseLayer {
   id: string;
   type: 'background' | 'image_replace' | 'text';
@@ -138,6 +152,7 @@ export interface BaseLayer {
   rotation: number;
   scaleX: number;
   scaleY: number;
+  shape?: LayerShape;
 }
 
 export interface BackgroundLayer extends BaseLayer {
@@ -172,3 +187,25 @@ export interface TextLayer extends BaseLayer {
 }
 
 export type Layer = BackgroundLayer | ImageReplaceLayer | TextLayer;
+
+// 获取形状的CSS clip-path
+export function getShapeClipPath(shape?: LayerShape): string {
+  switch (shape) {
+    case 'circle':
+      return 'circle(50% at 50% 50%)';
+    case 'heart':
+      return 'path("M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z")';
+    case 'star':
+      return 'polygon(50% 0%, 61% 35%, 98% 35%, 68% 57%, 79% 91%, 50% 70%, 21% 91%, 32% 57%, 2% 35%, 39% 35%)';
+    case 'diamond':
+      return 'polygon(50% 0%, 100% 50%, 50% 100%, 0% 50%)';
+    case 'hexagon':
+      return 'polygon(25% 0%, 75% 0%, 100% 50%, 75% 100%, 25% 100%, 0% 50%)';
+    case 'triangle':
+      return 'polygon(50% 0%, 100% 100%, 0% 100%)';
+    case 'pentagon':
+      return 'polygon(50% 0%, 100% 38%, 82% 100%, 18% 100%, 0% 38%)';
+    default:
+      return 'none';
+  }
+}

@@ -1,9 +1,9 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { Stage, Layer, Image as KonvaImage, Text as KonvaText, Rect, Transformer, Line } from 'react-konva';
+import { Stage, Layer, Image as KonvaImage, Text as KonvaText, Rect, Transformer, Group, Shape } from 'react-konva';
 import { adminTemplateApi, assetApi, categoryApi } from '@/api';
 import { useEditorStore } from '@/stores/useEditorStore';
-import { Layer as LayerType, BackgroundLayer, ImageReplaceLayer, TextLayer, TemplateDetail, Asset, Category } from '@/types';
+import { Layer as LayerType, BackgroundLayer, ImageReplaceLayer, TextLayer, TemplateDetail, Asset, Category, LayerShape, SHAPE_OPTIONS } from '@/types';
 import { loadFont } from '@/utils/fontLoader';
 import Konva from 'konva';
 
@@ -24,8 +24,6 @@ export default function AdminTemplateEditor() {
   const [assetType, setAssetType] = useState<'IMAGE' | 'FONT'>('IMAGE');
   const [stageScale, setStageScale] = useState(1);
   const [stagePos, setStagePos] = useState({ x: 0, y: 0 });
-  const [isLassoMode, setIsLassoMode] = useState(false);
-  const [lassoPoints, setLassoPoints] = useState<{ x: number; y: number }[]>([]);
 
   // 预览模式
   const [isPreviewMode, setIsPreviewMode] = useState(false);
@@ -359,25 +357,6 @@ export default function AdminTemplateEditor() {
     addLayer(newLayer);
   };
 
-  // 多边形套索 - 处理背景透明化
-  const handleLassoClick = (e: Konva.KonvaEventObject<MouseEvent>) => {
-    if (!isLassoMode) return;
-    const stage = stageRef.current!;
-    const pos = stage.getRelativePointerPosition();
-    if (!pos) return;
-    setLassoPoints([...lassoPoints, { x: pos.x, y: pos.y }]);
-  };
-
-  const handleLassoComplete = async () => {
-    if (lassoPoints.length < 3) {
-      alert('至少需要3个点');
-      return;
-    }
-    setIsLassoMode(false);
-    setLassoPoints([]);
-    alert('多边形套索完成，需要先上传背景图片再处理透明区域');
-  };
-
   // 文字层双击编辑 - 计算文字层在屏幕上的位置并显示 textarea
   const handleTextEditStart = useCallback((layer: TextLayer) => {
     if (!stageRef.current || !stageContainerRef.current) return;
@@ -531,22 +510,6 @@ export default function AdminTemplateEditor() {
             })}
           </div>
         </div>
-
-        {/* 多边形套索 */}
-        <div>
-          <h3 className="font-bold text-sm mb-2">背景透明工具</h3>
-          <button
-            onClick={() => { setIsLassoMode(!isLassoMode); setLassoPoints([]); }}
-            className={`w-full text-left px-3 py-2 text-sm border rounded ${isLassoMode ? 'bg-blue-50 border-blue-300' : 'hover:bg-gray-50'}`}
-          >
-            {isLassoMode ? '✅ 退出套索模式' : '🔶 多边形套索工具'}
-          </button>
-          {isLassoMode && lassoPoints.length >= 3 && (
-            <button onClick={handleLassoComplete} className="w-full mt-2 px-3 py-2 text-sm bg-green-500 text-white rounded hover:bg-green-600">
-              完成选区
-            </button>
-          )}
-        </div>
       </div>
 
       {/* 中间画布 */}
@@ -593,10 +556,6 @@ export default function AdminTemplateEditor() {
             onWheel={handleWheel}
             onClick={(e) => {
               if (isPreviewMode) return;
-              if (isLassoMode) {
-                handleLassoClick(e);
-                return;
-              }
               if (e.target === e.target.getStage()) {
                 selectLayer(null);
               }
@@ -615,16 +574,6 @@ export default function AdminTemplateEditor() {
                   updateLayer={updateLayer}
                 />
               ))}
-              {/* 套索路径预览 */}
-              {isLassoMode && lassoPoints.length > 0 && (
-                <Line
-                  points={lassoPoints.flatMap((p) => [p.x, p.y])}
-                  stroke="red"
-                  strokeWidth={2}
-                  dash={[5, 5]}
-                  closed={lassoPoints.length >= 3}
-                />
-              )}
               {!isPreviewMode && (
                 <Transformer ref={transformerRef} rotateEnabled={true} enabledAnchors={['top-left', 'top-right', 'bottom-left', 'bottom-right']} />
               )}
@@ -851,18 +800,18 @@ export default function AdminTemplateEditor() {
 
       {/* 版本配置预览覆盖层 */}
       {previewConfig && (
-        <div className="fixed bottom-4 left-1/2 -translate-x-1/2 bg-white rounded-lg shadow-xl border p-4 z-40 max-w-lg">
+        <div className="fixed bottom-4 left-1/2 -translate-x-1/2 bg-white rounded-lg shadow-xl border p-4 z-40" style={{ maxWidth: '500px', maxHeight: '400px' }}>
           <div className="flex items-center justify-between mb-3">
             <h3 className="text-sm font-bold">版本配置预览（只读）</h3>
             <button onClick={() => { setPreviewVersionId(null); setPreviewConfig(null); }} className="text-gray-400 hover:text-gray-600 text-sm">✕</button>
           </div>
-          <div className="flex items-center justify-center bg-gray-100 rounded p-2" style={{ maxHeight: '300px', overflow: 'auto' }}>
+          <div className="flex items-center justify-center bg-gray-100 rounded p-2 overflow-auto" style={{ maxHeight: '350px' }}>
             <Stage
               width={previewConfig.width || canvasWidth}
               height={previewConfig.height || canvasHeight}
-              scaleX={0.5}
-              scaleY={0.5}
-              style={{ backgroundColor: 'white' }}
+              scaleX={0.4}
+              scaleY={0.4}
+              style={{ backgroundColor: 'white', transformOrigin: 'top left' }}
             >
               <Layer>
                 {(previewConfig.layers || []).filter((l: any) => l.visible !== false).map((layer: any) => (
@@ -918,6 +867,10 @@ function AdminCanvasLayer({
     }
   }, [layer]);
 
+  const handleDragEnd = (e: Konva.KonvaEventObject<DragEvent>) => {
+    updateLayer(layer.id, { x: e.target.x(), y: e.target.y() });
+  };
+
   const commonProps = {
     id: layer.id,
     x: layer.x,
@@ -928,15 +881,153 @@ function AdminCanvasLayer({
     draggable: !layer.locked && !isPreviewMode,
     onClick: onSelect,
     onTap: onSelect,
+    onDragEnd: handleDragEnd,
+  };
+
+  // 生成形状裁剪路径
+  const renderWithShape = (content: React.ReactNode) => {
+    const shape = layer.shape;
+    if (!shape || shape === 'none') {
+      return content;
+    }
+
+    const w = (layer.width as number) || 100;
+    const h = (layer.height as number) || 100;
+    const centerX = w / 2;
+    const centerY = h / 2;
+
+    let clipFunc: ((ctx: CanvasRenderingContext2D) => void) | undefined;
+
+    switch (shape) {
+      case 'circle': {
+        const radius = Math.min(centerX, centerY);
+        clipFunc = (ctx: CanvasRenderingContext2D) => {
+          ctx.beginPath();
+          ctx.arc(centerX, centerY, radius, 0, Math.PI * 2, false);
+          ctx.closePath();
+        };
+        break;
+      }
+      case 'heart': {
+        clipFunc = (ctx: CanvasRenderingContext2D) => {
+          ctx.beginPath();
+          const topCurveHeight = h * 0.3;
+          ctx.moveTo(centerX, h);
+          // 左侧曲线
+          ctx.bezierCurveTo(centerX - w * 0.5, h * 0.6, centerX - w * 0.5, topCurveHeight, centerX, topCurveHeight);
+          // 右侧曲线
+          ctx.bezierCurveTo(centerX + w * 0.5, topCurveHeight, centerX + w * 0.5, h * 0.6, centerX, h);
+          ctx.closePath();
+        };
+        break;
+      }
+      case 'star': {
+        const outerRadius = Math.min(centerX, centerY);
+        const innerRadius = outerRadius * 0.4;
+        const spikes = 5;
+        clipFunc = (ctx: CanvasRenderingContext2D) => {
+          ctx.beginPath();
+          for (let i = 0; i < spikes * 2; i++) {
+            const radius = i % 2 === 0 ? outerRadius : innerRadius;
+            const angle = (i * Math.PI) / spikes - Math.PI / 2;
+            const x = centerX + Math.cos(angle) * radius;
+            const y = centerY + Math.sin(angle) * radius;
+            if (i === 0) {
+              ctx.moveTo(x, y);
+            } else {
+              ctx.lineTo(x, y);
+            }
+          }
+          ctx.closePath();
+        };
+        break;
+      }
+      case 'diamond': {
+        clipFunc = (ctx: CanvasRenderingContext2D) => {
+          ctx.beginPath();
+          ctx.moveTo(centerX, 0);
+          ctx.lineTo(w, centerY);
+          ctx.lineTo(centerX, h);
+          ctx.lineTo(0, centerY);
+          ctx.closePath();
+        };
+        break;
+      }
+      case 'hexagon': {
+        clipFunc = (ctx: CanvasRenderingContext2D) => {
+          ctx.beginPath();
+          for (let i = 0; i < 6; i++) {
+            const angle = (i * 60 - 30) * (Math.PI / 180);
+            const x = centerX + centerX * Math.cos(angle);
+            const y = centerY + centerY * Math.sin(angle);
+            if (i === 0) {
+              ctx.moveTo(x, y);
+            } else {
+              ctx.lineTo(x, y);
+            }
+          }
+          ctx.closePath();
+        };
+        break;
+      }
+      case 'triangle': {
+        clipFunc = (ctx: CanvasRenderingContext2D) => {
+          ctx.beginPath();
+          ctx.moveTo(centerX, 0);
+          ctx.lineTo(w, h);
+          ctx.lineTo(0, h);
+          ctx.closePath();
+        };
+        break;
+      }
+      case 'pentagon': {
+        clipFunc = (ctx: CanvasRenderingContext2D) => {
+          ctx.beginPath();
+          for (let i = 0; i < 5; i++) {
+            const angle = (i * 72 - 90) * (Math.PI / 180);
+            const x = centerX + centerX * Math.cos(angle);
+            const y = centerY + centerY * Math.sin(angle);
+            if (i === 0) {
+              ctx.moveTo(x, y);
+            } else {
+              ctx.lineTo(x, y);
+            }
+          }
+          ctx.closePath();
+        };
+        break;
+      }
+    }
+
+    if (clipFunc) {
+      return (
+        <Group 
+          {...commonProps} 
+          clipFunc={(ctx: any) => clipFunc(ctx as unknown as CanvasRenderingContext2D)} 
+          clipX={0} 
+          clipY={0} 
+          clipWidth={w} 
+          clipHeight={h}
+        >
+          {content}
+        </Group>
+      );
+    }
+
+    return <Group {...commonProps}>{content}</Group>;
   };
 
   if (layer.type === 'background' && image) {
-    return <KonvaImage {...commonProps} image={image} width={layer.width as number} height={layer.height as number} />;
+    return renderWithShape(
+      <KonvaImage image={image} width={layer.width as number} height={layer.height as number} />
+    );
   }
 
   if (layer.type === 'image_replace') {
     if (image) {
-      return <KonvaImage {...commonProps} image={image} width={layer.width as number} height={layer.height as number} />;
+      return renderWithShape(
+        <KonvaImage image={image} width={layer.width as number} height={layer.height as number} />
+      );
     }
     const imgLayer = layer as ImageReplaceLayer;
     if (imgLayer.replace_mode === 'ai_cutout') {
@@ -1018,6 +1109,28 @@ function AdminLayerProperties({
         <PropInput label="缩放X" value={String(layer.scaleX)} type="number" onChange={(v) => onUpdate({ scaleX: Number(v) })} />
         <PropInput label="缩放Y" value={String(layer.scaleY)} type="number" onChange={(v) => onUpdate({ scaleY: Number(v) })} />
       </div>
+      {/* 形状选择器 - 仅对图片图层可用 */}
+      {layer.type !== 'background' && (
+        <div>
+          <label className="block text-xs text-gray-500 mb-1">裁剪形状</label>
+          <div className="grid grid-cols-4 gap-1.5">
+            {SHAPE_OPTIONS.map((opt) => (
+              <button
+                key={opt.value}
+                onClick={() => onUpdate({ shape: opt.value } as any)}
+                className={`p-1.5 text-center rounded border transition-colors ${
+                  (layer.shape || 'none') === opt.value
+                    ? 'border-blue-500 bg-blue-50 text-blue-600'
+                    : 'border-gray-200 hover:border-gray-300 text-gray-600'
+                }`}
+                title={opt.label}
+              >
+                <span className="text-lg">{opt.icon}</span>
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
       <div className="flex gap-4">
         <label className="flex items-center gap-1 text-sm">
           <input type="checkbox" checked={layer.locked} onChange={(e) => onUpdate({ locked: e.target.checked })} /> 锁定

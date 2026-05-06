@@ -68,7 +68,8 @@ export const adminTemplateApi = {
     api.post('/admin/templates', data),
   update: (id: number, data: { title?: string; description?: string; category_id?: number }) =>
     api.put(`/admin/templates/${id}`, data),
-  delete: (id: number) => api.delete(`/admin/templates/${id}`),
+  delete: (id: number, deleteAllVersions?: boolean) => 
+    api.delete(`/admin/templates/${id}`, { params: { delete_all_versions: deleteAllVersions } }),
   copy: (id: number) => api.post(`/admin/templates/${id}/copy`),
   saveDraft: (id: number, config_data: object) =>
     api.put(`/admin/templates/${id}/draft`, config_data),
@@ -107,6 +108,24 @@ export const aiApi = {
     const formData = new FormData();
     formData.append('file', file);
     return api.post('/ai/remove-bg', formData, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    });
+  },
+  segmentByText: (file: File, textPrompt: string) => {
+    const formData = new FormData();
+    formData.append('file', file);
+    formData.append('text_prompt', textPrompt);
+    return api.post('/ai/segment-by-text', formData, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    });
+  },
+  detectObjects: (file: File, textPrompt?: string) => {
+    const formData = new FormData();
+    formData.append('file', file);
+    if (textPrompt) {
+      formData.append('text_prompt', textPrompt);
+    }
+    return api.post('/ai/detect-objects', formData, {
       headers: { 'Content-Type': 'multipart/form-data' },
     });
   },

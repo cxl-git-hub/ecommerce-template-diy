@@ -13,7 +13,7 @@ from app.models.template_version import TemplateVersion
 from app.models.user import User
 from app.schemas.schemas import (
     TemplateCreate, TemplateUpdate, TemplateOut, TemplateDetailOut,
-    TemplateVersionOut, PublishRequest,
+    TemplateVersionOut, TemplateVersionBrief, PublishRequest,
 )
 
 router = APIRouter(prefix="/admin/templates", tags=["管理员-模板管理"])
@@ -34,7 +34,37 @@ def list_templates(
         query = query.filter(Template.category_id == category_id)
     if search:
         query = query.filter(Template.title.contains(search))
-    return query.order_by(Template.created_at.desc()).all()
+    
+    templates = query.order_by(Template.created_at.desc()).all()
+    
+    # 为每个模板添加版本信息
+    result = []
+    for template in templates:
+        template_out = TemplateOut.model_validate(template)
+        
+        # 获取最新版本（用于显示缩略图）
+        latest_version = db.query(TemplateVersion).filter(
+            TemplateVersion.template_id == template.id,
+        ).order_by(TemplateVersion.version_number.desc()).first()
+        
+        if latest_version:
+            template_out.current_version = TemplateVersionBrief(
+                id=latest_version.id,
+                version_number=latest_version.version_number,
+                description=latest_version.description,
+                thumbnail_url=latest_version.thumbnail_url,
+                status=latest_version.status,
+                created_at=latest_version.created_at,
+            )
+        
+        # 获取版本总数
+        template_out.versions_count = db.query(TemplateVersion).filter(
+            TemplateVersion.template_id == template.id,
+        ).count()
+        
+        result.append(template_out)
+    
+    return result
 
 
 @router.post("", response_model=TemplateOut)
@@ -69,18 +99,29 @@ def get_template(
     if not template:
         raise HTTPException(status_code=404, detail="模板不存在")
     
-    # 获取最新草稿配置
+    # 获取最新草稿配置，如果没有草稿则加载已发布版本的配置
     draft_version = db.query(TemplateVersion).filter(
         TemplateVersion.template_id == template_id,
         TemplateVersion.status == "DRAFT",
     ).order_by(TemplateVersion.version_number.desc()).first()
+    
+    # 如果没有草稿，加载已发布版本的配置
+    config_to_load = None
+    if draft_version:
+        config_to_load = draft_version.config_data
+    elif template.published_version_id:
+        published_version = db.query(TemplateVersion).filter(
+            TemplateVersion.id == template.published_version_id,
+        ).first()
+        if published_version:
+            config_to_load = published_version.config_data
     
     versions = db.query(TemplateVersion).filter(
         TemplateVersion.template_id == template_id,
     ).order_by(TemplateVersion.version_number.desc()).all()
     
     result = TemplateDetailOut.model_validate(template)
-    result.current_draft_config = draft_version.config_data if draft_version else None
+    result.current_draft_config = config_to_load
     result.current_draft_version_id = draft_version.id if draft_version else None
     result.versions = [TemplateVersionOut.model_validate(v) for v in versions]
     return result
@@ -113,6 +154,7 @@ def update_template(
 @router.delete("/{template_id}")
 def delete_template(
     template_id: int,
+    delete_all_versions: bool = False,
     db: Session = Depends(get_db),
     admin: User = Depends(require_admin),
 ):
@@ -122,9 +164,21 @@ def delete_template(
     ).first()
     if not template:
         raise HTTPException(status_code=404, detail="模板不存在")
-    template.is_deleted = 1
-    db.commit()
-    return {"message": "删除成功"}
+    
+    if delete_all_versions:
+        # 彻底删除：删除所有版本记录
+        db.query(TemplateVersion).filter(
+            TemplateVersion.template_id == template_id
+        ).delete()
+        # 物理删除模板记录
+        db.delete(template)
+        db.commit()
+        return {"message": "模板及所有版本已彻底删除"}
+    else:
+        # 普通删除：软删除模板，保留版本记录
+        template.is_deleted = 1
+        db.commit()
+        return {"message": "删除成功"}
 
 
 @router.post("/{template_id}/copy", response_model=TemplateOut)
@@ -194,12 +248,14 @@ def save_draft(
     if draft:
         draft.config_data = config_data
     else:
+        # 获取当前最大版本号，新草稿版本号为最大版本号+1
         max_ver = db.query(TemplateVersion).filter(
             TemplateVersion.template_id == template_id,
-        ).count()
+        ).order_by(TemplateVersion.version_number.desc()).first()
+        new_ver_num = (max_ver.version_number + 1) if max_ver else 1
         draft = TemplateVersion(
             template_id=template_id,
-            version_number=max_ver + 1,
+            version_number=new_ver_num,
             config_data=config_data,
             status="DRAFT",
         )

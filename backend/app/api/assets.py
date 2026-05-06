@@ -137,22 +137,14 @@ def delete_asset(
     file_name = asset.file_name
     is_referenced = False
 
-    # 1. 检查 templates 表：通过 published_version 的 config_data 检查引用
-    templates = db.query(Template).filter(Template.is_deleted == 0).all()
-    for template in templates:
-        if template.published_version_id:
-            pub_version = db.query(TemplateVersion).filter(
-                TemplateVersion.id == template.published_version_id
-            ).first()
-            if pub_version and pub_version.config_data:
-                config_str = json.dumps(pub_version.config_data)
-                if file_path in config_str or file_path_alt in config_str or file_name in config_str:
-                    is_referenced = True
-                    break
+    # 获取所有未删除模板的ID列表
+    active_template_ids = [t.id for t in db.query(Template).filter(Template.is_deleted == 0).all()]
 
-    # 2. 检查 template_versions 表：所有版本的 config_data
-    if not is_referenced:
-        versions = db.query(TemplateVersion).all()
+    # 检查未删除模板的所有版本的 config_data
+    if active_template_ids:
+        versions = db.query(TemplateVersion).filter(
+            TemplateVersion.template_id.in_(active_template_ids)
+        ).all()
         for version in versions:
             if version.config_data:
                 config_str = json.dumps(version.config_data)
