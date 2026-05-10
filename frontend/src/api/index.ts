@@ -111,14 +111,39 @@ export const aiApi = {
       headers: { 'Content-Type': 'multipart/form-data' },
     });
   },
-  segmentByText: (file: File, textPrompt: string) => {
+  // 点提示分割 - 用户点击要保留的区域
+  segmentByPoints: (file: File, points: { x: number; y: number; label: number }[], imageWidth: number, imageHeight: number) => {
     const formData = new FormData();
     formData.append('file', file);
-    formData.append('text_prompt', textPrompt);
-    return api.post('/ai/segment-by-text', formData, {
+    formData.append('points', JSON.stringify(points));
+    formData.append('image_width', String(imageWidth));
+    formData.append('image_height', String(imageHeight));
+    return api.post('/ai/segment-by-points', formData, {
       headers: { 'Content-Type': 'multipart/form-data' },
     });
   },
+  // 框提示分割 - 用户框选要分割的区域
+  segmentByBox: (file: File, x1: number, y1: number, x2: number, y2: number) => {
+    const formData = new FormData();
+    formData.append('file', file);
+    formData.append('x1', String(x1));
+    formData.append('y1', String(y1));
+    formData.append('x2', String(x2));
+    formData.append('y2', String(y2));
+    return api.post('/ai/segment-by-box', formData, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    });
+  },
+  // 文本引导分割 - Grounding DINO + SAM 2
+  detectAndSegment: (file: File, textPrompt: string) => {
+    const formData = new FormData();
+    formData.append('file', file);
+    formData.append('text_prompt', textPrompt);
+    return api.post('/ai/detect-and-segment', formData, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    });
+  },
+  // 检测图片中的对象
   detectObjects: (file: File, textPrompt?: string) => {
     const formData = new FormData();
     formData.append('file', file);
